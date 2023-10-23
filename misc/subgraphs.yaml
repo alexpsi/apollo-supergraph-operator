@@ -1,0 +1,42 @@
+apiVersion: supergraph.operator.cloud/v1
+kind: SubGraph
+metadata:
+  name: panda
+spec:
+  graphQLSchema: >
+    directive @tag(name: String!) repeatable on FIELD_DEFINITION
+
+    type Query {
+      allPandas: [Panda]
+      panda(name: ID!): Panda
+    }
+
+    type Panda {
+        name:ID!
+        favoriteFood: String @tag(name: "nom-noem-nom")
+    } 
+  target: http://panda
+
+---
+apiVersion: supergraph.operator.cloud/v1
+kind: SubGraph
+metadata:
+  name: file
+spec:
+  target: http://filee
+  graphQLSchema: >
+    type Query {
+      file(id: ID!): String # Takes id property as an argument and returns a File
+      files: [String!]! # Returns every file stored
+    }
+
+    type Mutation {
+      renameFile(
+        id: ID! # An ID of the file to be changed
+        name: String! # A new name of the file
+      ): String
+
+      deleteFile(
+        id: ID! # Id of the file to be deleted
+      ): String
+    }

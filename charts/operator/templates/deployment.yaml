@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "operator.fullname" . }}
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "operator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "operator.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: apollo-router
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: ghcr.io/apollographql/router:v1.33.1
+          args:
+          - --dev
+          - --hot-reload
+          - --supergraph
+          - /federation/supergraph.graphql
+          - --config
+          - /routerconfig/configuration.yaml
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+          - name: router-configuration
+            mountPath: /routerconfig/
+            readOnly: true
+          - name: federation
+            mountPath: /federation/
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: health
+              containerPort: 8088
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: "/health?live"
+              port: health
+          readinessProbe:
+            httpGet:
+              path: "/health?ready"
+              port: health
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        - name: operator-supergraph
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["yarn"]
+          args:
+          - start:prod
+          volumeMounts:
+          - name: federation
+            mountPath: /usr/src/app/federation
+          ports:
+            - name: operator
+              containerPort: 9091
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: "/health"
+              port: operator
+          readinessProbe:
+            httpGet:
+              path: "/health"
+              port: operator
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+      - name: router-configuration
+        configMap:
+          name: cm-router-config
+      - name: federation
+        emptyDir:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
